@@ -1,0 +1,13 @@
+#include <windows.h>
+
+//#include <xboxverp.h>
+//
+//#define VER_FILETYPE    VFT_APP
+//#define VER_FILESUBTYPE VFT2_UNKNOWN
+//#define VER_FILEDESCRIPTION_STR     "ShortCut.exe"
+//#define VER_INTERNALNAME_STR        "ShortCut.exe"
+//
+//#include "common.ver"
+// non localizable resources should be placed here
+
+// localizable resource should be placed in ui.rc
