@@ -1,5 +1,12 @@
+//=====================================================================================================================================================================================================
+//
+// SpongySoft ShortCut
+// Copyright (C) SpongySoft. All rights reserved.
+//
+//=====================================================================================================================================================================================================
 #include "stdafx.h"
 #include "shortcut.h"
+#include "condebug.h"
 
 #define MAX_STRING 4096
 #define USE_CCOMPTR
@@ -8,6 +15,7 @@
 #define copystring(dst,src) _tcscpy_s(dst, ARRAY_SIZE(dst), src)
 
 //=====================================================================================================================================================================================================
+// Define the console-specific property keys
 //=====================================================================================================================================================================================================
 #define PID_CONSOLE_FORCEV2            1
 #define PID_CONSOLE_WRAPTEXT           2
@@ -15,6 +23,7 @@
 #define PID_CONSOLE_CTRLKEYSDISABLED   4
 #define PID_CONSOLE_LINESELECTION      5
 #define PID_CONSOLE_WINDOWTRANSPARENCY 6
+#define PID_CONSOLE_TRIMZEROS          7
 
 #define DEFINE_PROPERTYKEY_FORCE(name, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8, pid) extern "C" const PROPERTYKEY __declspec(selectany) name = { { l, w1, w2, { b1, b2,  b3,  b4,  b5,  b6,  b7,  b8 } }, pid }
 
@@ -24,8 +33,11 @@ DEFINE_PROPERTYKEY_FORCE(PKEY_Console_FilterOnPaste,			0x0C570607, 0x0396, 0x43D
 DEFINE_PROPERTYKEY_FORCE(PKEY_Console_CtrlKeyShortcutsDisabled,	0x0C570607, 0x0396, 0x43DE, 0x9D, 0x61, 0xE3, 0x21, 0xD7, 0xDF, 0x50, 0x26,	PID_CONSOLE_CTRLKEYSDISABLED);
 DEFINE_PROPERTYKEY_FORCE(PKEY_Console_LineSelection,			0x0C570607, 0x0396, 0x43DE, 0x9D, 0x61, 0xE3, 0x21, 0xD7, 0xDF, 0x50, 0x26,	PID_CONSOLE_LINESELECTION);
 DEFINE_PROPERTYKEY_FORCE(PKEY_Console_WindowTransparency,		0x0C570607, 0x0396, 0x43DE, 0x9D, 0x61, 0xE3, 0x21, 0xD7, 0xDF, 0x50, 0x26,	PID_CONSOLE_WINDOWTRANSPARENCY);
+DEFINE_PROPERTYKEY_FORCE(PKEY_Console_TrimZeros,				0x0C570607, 0x0396, 0x43DE, 0x9D, 0x61, 0xE3, 0x21, 0xD7, 0xDF, 0x50, 0x26, PID_CONSOLE_TRIMZEROS);
+
 
 //=====================================================================================================================================================================================================
+// Define a macro for checking the result that does some special work during debug builds
 //=====================================================================================================================================================================================================
 #ifdef _DEBUG
 #define CHK(statement) { hr = statement; if (FAILED(hr)) { printf("%s (%d): error 0x%08X\n", __FILE__, __LINE__, hr); return hr; } }
@@ -33,15 +45,20 @@ DEFINE_PROPERTYKEY_FORCE(PKEY_Console_WindowTransparency,		0x0C570607, 0x0396, 0
 #define CHK(statement) { hr = statement; if (FAILED(hr)) { return hr; } }
 #endif
 
+
 //=====================================================================================================================================================================================================
+// We must include the "propsys" library
 //=====================================================================================================================================================================================================
 #pragma comment(lib, "propsys")
 
+
 //=====================================================================================================================================================================================================
+// SpongySoft namespace
 //=====================================================================================================================================================================================================
 namespace SpongySoft
 {
 	//=================================================================================================================================================================================================
+	// Internal table used to map the console options
 	//=================================================================================================================================================================================================
 	static struct
 	{
@@ -54,9 +71,12 @@ namespace SpongySoft
 		{ &PKEY_Console_CtrlKeyShortcutsDisabled,	ShortCut::v2ConsoleOption::ctrlkeysdisabled },
 		{ &PKEY_Console_LineSelection,				ShortCut::v2ConsoleOption::lineselection },
 		{ &PKEY_Console_WindowTransparency,			ShortCut::v2ConsoleOption::windowtransparency },
+		{ &PKEY_Console_TrimZeros,					ShortCut::v2ConsoleOption::trimzeros },
 	};
 
+
 	//=================================================================================================================================================================================================
+	// Internal shortcut class
 	//=================================================================================================================================================================================================
 	class _ShortCut : public ShortCut
 	{
@@ -67,6 +87,7 @@ namespace SpongySoft
 		virtual HRESULT SetIcon(LPCTSTR pszShortcutIconFile, INT iIconIndex);
 		virtual HRESULT SetConsoleProps(NT_CONSOLE_PROPS const *pConsoleProps);
 		virtual HRESULT SetV2ConsoleOption(v2ConsoleOption option, v2ConsoleBool result);
+		virtual HRESULT SetShowCmd(int iShowCmd);
 
 		virtual HRESULT GetTarget(LPTSTR pszShortcutTarget, DWORD dwSizeInBytes) const;
 		virtual HRESULT GetArguments(LPTSTR pszShortcutArguments, DWORD dwSizeInBytes) const;
@@ -75,6 +96,7 @@ namespace SpongySoft
 		virtual HRESULT GetIcon(LPTSTR pszShortcutIconFile, DWORD dwSizeInBytes, INT *piIconIndex) const;
 		virtual HRESULT GetConsoleProps(NT_CONSOLE_PROPS *pConsoleProps, DWORD dwSize) const;
 		virtual HRESULT GetV2ConsoleOption(v2ConsoleOption option, v2ConsoleBool *result) const;
+		virtual HRESULT GetShowCmd(int &iShowCmd) const;
 
 		virtual DWORD GetFlags(void) const;
 		virtual void SetFlags(DWORD flags);
@@ -82,15 +104,16 @@ namespace SpongySoft
 		virtual HRESULT GetRunAsAdmin(BOOL &bRunAsAdmin) const;
 		virtual HRESULT SetRunAsAdmin(BOOL bRunAsAdmin);
 
-#ifdef _DEBUG
+//#ifdef _DEBUG
 		virtual LPCTSTR Target(void) const { return this->szShortcutTarget; }
 		virtual LPCTSTR Arguments(void) const { return this->szShortcutArguments; }
 		virtual LPCTSTR Description(void) const { return this->szShortcutDescription; }
 		virtual LPCTSTR WorkingDirectory(void) const { return this->szShortcutWorkingDirectory; }
 		virtual LPCTSTR IconFile(void) const { return this->szShortcutIconFile; }
+		virtual LPCTSTR ShortcutFile(void) const { return this->szShortcutFile; }
 		virtual INT IconIndex(void) const  { return this->iIcon; }
 		virtual const NT_CONSOLE_PROPS *ConsoleProps(void) const { return &this->props; }
-#endif
+//#endif
 
 	public:
 		virtual HRESULT Save(void) const;
@@ -108,17 +131,18 @@ namespace SpongySoft
 		HRESULT Load();
 
 	private:
-		TCHAR   			szShortcutFile[MAX_STRING];
-		TCHAR   			szShortcutTarget[MAX_STRING];
-		TCHAR   			szShortcutArguments[MAX_STRING];
-		TCHAR   			szShortcutDescription[MAX_STRING];
-		TCHAR   			szShortcutWorkingDirectory[MAX_STRING];
-		TCHAR   			szShortcutIconFile[MAX_STRING];
+		TCHAR				szShortcutFile[MAX_STRING];
+		TCHAR				szShortcutTarget[MAX_STRING];
+		TCHAR				szShortcutArguments[MAX_STRING];
+		TCHAR				szShortcutDescription[MAX_STRING];
+		TCHAR				szShortcutWorkingDirectory[MAX_STRING];
+		TCHAR				szShortcutIconFile[MAX_STRING];
 		int					iIcon;
 		NT_CONSOLE_PROPS	props;
 		bool				propsAreValid;
 		DWORD				dwFlags;
 		bool				runAsAdmin;
+		int					iShowCmd;
 		v2ConsoleBool		v2ConsoleOptions[v2ConsoleOption::maxvalue];
 
 	friend ShortCut* ShortCut::Create(LPCTSTR pszShortcutFile, LPCTSTR pszShortcutTarget, LPCTSTR pszShortcutArguments, LPCTSTR pszShortcutDescription, LPCTSTR pszShortcutWorkingDirectory);
@@ -126,7 +150,9 @@ namespace SpongySoft
 	friend ShortCut* ShortCut::Open(LPCTSTR pszShortcutFile);
 	};
 
+
 	//=================================================================================================================================================================================================
+	// Create a shortcut
 	//=================================================================================================================================================================================================
 	ShortCut* ShortCut::Create(LPCTSTR pszShortcutFile, LPCTSTR pszShortcutTarget, LPCTSTR pszShortcutArguments, LPCTSTR pszShortcutDescription, LPCTSTR pszShortcutWorkingDirectory)
 	{
@@ -141,7 +167,9 @@ namespace SpongySoft
 		return pShortCut;
 	}
 
+
 	//=================================================================================================================================================================================================
+	// Create a shortcut
 	//=================================================================================================================================================================================================
 	ShortCut* ShortCut::Create(LPCTSTR pszShortcutFile)
 	{
@@ -156,7 +184,9 @@ namespace SpongySoft
 		return pShortCut;
 	}
 
+
 	//=================================================================================================================================================================================================
+	// Open a shortcut
 	//=================================================================================================================================================================================================
 	ShortCut* ShortCut::Open(LPCTSTR pszShortcutFile)
 	{
@@ -174,7 +204,9 @@ namespace SpongySoft
 		return NULL;
 	}
 
+
 	//=================================================================================================================================================================================================
+	// Internal initialization
 	//=================================================================================================================================================================================================
 	void _ShortCut::_internal_init(LPCTSTR pszShortcutFile, LPCTSTR pszShortcutTarget, LPCTSTR pszShortcutArguments, LPCTSTR pszShortcutDescription, LPCTSTR pszShortcutWorkingDirectory)
 	{
@@ -192,12 +224,15 @@ namespace SpongySoft
 		memset(&this->v2ConsoleOptions, 0, sizeof(this->v2ConsoleOptions));
 	}
 
+
 	//=================================================================================================================================================================================================
+	// Constructor
 	//=================================================================================================================================================================================================
 	_ShortCut::_ShortCut(LPCTSTR pszShortcutFile, LPCTSTR pszShortcutTarget, LPCTSTR pszShortcutArguments, LPCTSTR pszShortcutDescription, LPCTSTR pszShortcutWorkingDirectory)
 	{
 		this->_internal_init(pszShortcutFile, pszShortcutTarget, pszShortcutArguments, pszShortcutDescription, pszShortcutWorkingDirectory);
 	}
+
 
 	//=================================================================================================================================================================================================
 	//=================================================================================================================================================================================================
@@ -206,20 +241,26 @@ namespace SpongySoft
 		this->_internal_init(pszShortcutFile, _T(""), _T(""), _T(""), _T(""));
 	}
 
+
 	//=================================================================================================================================================================================================
+	// Destructor
 	//=================================================================================================================================================================================================
 	_ShortCut::~_ShortCut()
 	{
 	}
 
+
 	//=================================================================================================================================================================================================
+	// COM release
 	//=================================================================================================================================================================================================
 	void _ShortCut::Release(void)
 	{
 		delete this;
 	}
 
+
 	//=================================================================================================================================================================================================
+	// Set the target of the shortcut
 	//=================================================================================================================================================================================================
 	HRESULT _ShortCut::SetTarget(LPCTSTR pszShortcutTarget)
 	{
@@ -227,7 +268,9 @@ namespace SpongySoft
 		return S_OK;
 	}
 
+
 	//=================================================================================================================================================================================================
+	// Set the arguments of the shortcut
 	//=================================================================================================================================================================================================
 	HRESULT _ShortCut::SetArguments(LPCTSTR pszShortcutArguments)
 	{
@@ -235,7 +278,9 @@ namespace SpongySoft
 		return S_OK;
 	}
 
+
 	//=================================================================================================================================================================================================
+	// Set the description of the shortcut
 	//=================================================================================================================================================================================================
 	HRESULT _ShortCut::SetDescription(LPCTSTR pszShortcutDescription)
 	{
@@ -243,7 +288,9 @@ namespace SpongySoft
 		return S_OK;
 	}
 
+
 	//=================================================================================================================================================================================================
+	// Set the working directory of the shortcut
 	//=================================================================================================================================================================================================
 	HRESULT _ShortCut::SetWorkingDirectory(LPCTSTR pszShortcutWorkingDirectory)
 	{
@@ -251,7 +298,9 @@ namespace SpongySoft
 		return S_OK;
 	}
 
+
 	//=================================================================================================================================================================================================
+	// Set the icon of the shortcut
 	//=================================================================================================================================================================================================
 	HRESULT _ShortCut::SetIcon(LPCTSTR pszShortcutIconFile, INT iIconIndex)
 	{
@@ -260,7 +309,9 @@ namespace SpongySoft
 		return S_OK;
 	}
 
+
 	//=================================================================================================================================================================================================
+	// Get the target of the shortcut
 	//=================================================================================================================================================================================================
 	HRESULT _ShortCut::GetTarget(LPTSTR pszShortcutTarget, DWORD dwSizeInBytes) const
 	{
@@ -268,7 +319,9 @@ namespace SpongySoft
 		return S_OK;
 	}
 
+
 	//=================================================================================================================================================================================================
+	// Get the arguments of the shortcut
 	//=================================================================================================================================================================================================
 	HRESULT _ShortCut::GetArguments(LPTSTR pszShortcutArguments, DWORD dwSizeInBytes) const
 	{
@@ -276,7 +329,9 @@ namespace SpongySoft
 		return S_OK;
 	}
 
+
 	//=================================================================================================================================================================================================
+	// Get the description of the shortcut
 	//=================================================================================================================================================================================================
 	HRESULT _ShortCut::GetDescription(LPTSTR pszShortcutDescription, DWORD dwSizeInBytes) const
 	{
@@ -284,7 +339,9 @@ namespace SpongySoft
 		return S_OK;
 	}
 
+
 	//=================================================================================================================================================================================================
+	// Get the working directory of the shortcut
 	//=================================================================================================================================================================================================
 	HRESULT _ShortCut::GetWorkingDirectory(LPTSTR pszShortcutWorkingDirectory, DWORD dwSizeInBytes) const
 	{
@@ -292,7 +349,9 @@ namespace SpongySoft
 		return S_OK;
 	}
 
+
 	//=================================================================================================================================================================================================
+	// Get the icon of the shortcut
 	//=================================================================================================================================================================================================
 	HRESULT _ShortCut::GetIcon(LPTSTR pszShortcutFile, DWORD dwSizeInBytes, INT *piIconIndex) const
 	{
@@ -305,7 +364,9 @@ namespace SpongySoft
 		return S_OK;
 	}
 
+
 	//=================================================================================================================================================================================================
+	// Get the console props of the shortcut
 	//=================================================================================================================================================================================================
 	HRESULT _ShortCut::GetConsoleProps(NT_CONSOLE_PROPS *pConsoleProps, DWORD dwSize) const
 	{
@@ -331,7 +392,9 @@ namespace SpongySoft
 		}
 	}
 
+
 	//=================================================================================================================================================================================================
+	// Set the console props of the shortcut
 	//=================================================================================================================================================================================================
 	HRESULT _ShortCut::SetConsoleProps(NT_CONSOLE_PROPS const *pConsoleProps)
 	{
@@ -345,7 +408,9 @@ namespace SpongySoft
 		return S_OK;
 	}
 
+
 	//=================================================================================================================================================================================================
+	// Save the shortcut
 	//=================================================================================================================================================================================================
 	HRESULT _ShortCut::Save(void) const
 	{
@@ -356,7 +421,7 @@ namespace SpongySoft
 		IShellLink* pShellLink;
 		#endif
 
-		if (SUCCEEDED(hr=CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLink, (LPVOID *)&pShellLink)))
+		if (SUCCEEDED(hr=CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLink, reinterpret_cast<void **>(&pShellLink))))
 		{
 			#ifdef USE_CCOMPTR
 			#else
@@ -368,15 +433,22 @@ namespace SpongySoft
 			IPersistFile* pPersistFile = nullptr;
 			#endif
 
-			if (SUCCEEDED(hr=pShellLink->QueryInterface(IID_IPersistFile, (LPVOID *)&pPersistFile)))
+			//
+			// Don't bother doing any of the work against pShellLink unless we **CAN** create the
+			// IID_IPersistFile, because if we can't, then we won't be able to save it!
+			//
+			if (SUCCEEDED(hr=pShellLink->QueryInterface(IID_IPersistFile, reinterpret_cast<void **>(&pPersistFile))))
 			{
 				pShellLink->SetPath(this->szShortcutTarget);
 				pShellLink->SetArguments(this->szShortcutArguments);
 				pShellLink->SetDescription(this->szShortcutDescription);
 				pShellLink->SetWorkingDirectory(this->szShortcutWorkingDirectory);
 				pShellLink->SetIconLocation(this->szShortcutIconFile, this->iIcon);
+				pShellLink->SetShowCmd(this->iShowCmd);
 
+				//
 				// v2 console options
+				//
 				if (true)
 				{
 					#ifdef USE_CCOMPTR
@@ -409,11 +481,11 @@ namespace SpongySoft
 				{
 					#ifdef USE_CCOMPTR
 					CComPtr<IShellLinkDataList> pDataList = nullptr;
+					if (SUCCEEDED(hr=(pShellLink->QueryInterface(IID_PPV_ARGS(&pDataList)))))
 					#else
 					IShellLinkDataList *pDataList = nullptr;
+					if (SUCCEEDED(hr=pShellLink->QueryInterface(IID_IShellLinkDataList, reinterpret_cast<void **>(&pDataList))))
 					#endif
-
-					if (SUCCEEDED(hr=pShellLink->QueryInterface(IID_IShellLinkDataList, (LPVOID *)&pDataList)))
 					{
 						if (this->propsAreValid)
 						{
@@ -431,16 +503,12 @@ namespace SpongySoft
 						{
 							if (this->runAsAdmin)
 							{
-#ifdef _DEBUG
-								printf("%s (%d)\n", __FILE__,__LINE__);
-#endif
+								lprintf("\n");
 								dwFlags |= SLDF_RUNAS_USER;
 							}
 							else
 							{
-#ifdef _DEBUG
-								printf("%s (%d)\n", __FILE__,__LINE__);
-#endif
+								lprintf("\n");
 								dwFlags &= ~SLDF_RUNAS_USER;
 							}
 
@@ -448,21 +516,23 @@ namespace SpongySoft
 							dwFlags |= SLDF_FORCE_NO_LINKINFO;
 							dwFlags |= SLDF_FORCE_NO_LINKTRACK;
 							dwFlags |= SLDF_DISABLE_LINK_PATH_TRACKING;
-#ifdef _DEBUG
-							printf("%s (%d)\n", __FILE__,__LINE__);
-#endif
+							lprintf("\n");
 							if (SUCCEEDED(hr=pDataList->SetFlags(dwFlags)))
 							{
-#ifdef _DEBUG
-								printf("%s (%d)\n", __FILE__,__LINE__);
-#endif
+								lprintf("\n");
+							}
+							else
+							{
+								lprintf("\n");
 							}
 
 							if (SUCCEEDED(hr=pDataList->GetFlags(&dwFlags)))
 							{
-#ifdef _DEBUG
-								printf("Flags: 0x%08X %s (%d)\n", dwFlags, __FILE__,__LINE__);
-#endif
+								lprintf("\n");
+							}
+							else
+							{
+								lprintf("\n");
 							}
 						}
 
@@ -503,7 +573,9 @@ namespace SpongySoft
 		return hr;
 	}
 
+
 	//=================================================================================================================================================================================================
+	// Load the shortcut
 	//=================================================================================================================================================================================================
 	HRESULT _ShortCut::Load(void)
 	{
@@ -514,7 +586,7 @@ namespace SpongySoft
 		IShellLink* pShellLink;
 		#endif
 
-		if (SUCCEEDED(hr=CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLink, (LPVOID *)&pShellLink)))
+		if (SUCCEEDED(hr=CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLink, reinterpret_cast<void **>(&pShellLink))))
 		{
 			#ifdef USE_CCOMPTR
 			CComPtr<IPersistFile> pPersistFile = nullptr;
@@ -525,7 +597,7 @@ namespace SpongySoft
 			#ifdef USE_CCOMPTR
 			if (SUCCEEDED(hr=pShellLink->QueryInterface(IID_PPV_ARGS(&pPersistFile))))
 			#else
-			if (SUCCEEDED(hr=pShellLink->QueryInterface(IID_IPersistFile, (LPVOID *)&pPersistFile)))
+			if (SUCCEEDED(hr=pShellLink->QueryInterface(IID_IPersistFile, reinterpret_cast<void **>(&pPersistFile))))
 			#endif
 			{
 				const WCHAR *pszShortcutFileName;
@@ -567,11 +639,15 @@ namespace SpongySoft
 						}
 					}
 
-					if (SUCCEEDED(hr=pShellLink->QueryInterface(IID_IShellLinkDataList, (LPVOID *)&pDataList)))
+					#ifdef USE_CCOMPTR
+					if (SUCCEEDED(hr=pShellLink->QueryInterface(IID_PPV_ARGS(&pDataList))))
+					#else
+					if (SUCCEEDED(hr=pShellLink->QueryInterface(IID_IShellLinkDataList, reinterpret_cast<void **>(&pDataList))))
+					#endif
 					{
 						NT_CONSOLE_PROPS *pprops;
 
-						if (SUCCEEDED(hr = pDataList->CopyDataBlock(NT_CONSOLE_PROPS_SIG, (void **)&pprops)))
+						if (SUCCEEDED(hr = pDataList->CopyDataBlock(NT_CONSOLE_PROPS_SIG, reinterpret_cast<void **>(&pprops))))
 						{
 							if (NULL != pprops)
 							{
@@ -596,9 +672,7 @@ namespace SpongySoft
 						}
 
 						this->runAsAdmin = SLDF_RUNAS_USER == (this->dwFlags & SLDF_RUNAS_USER);
-#ifdef _DEBUG
-						printf("%s (%d) (%d)\n", __FILE__, __LINE__, this->runAsAdmin);
-#endif
+						lprintf("%s (%d) (%d)\n", __FILE__, __LINE__, this->runAsAdmin);
 
 						#ifndef USE_CCOMPTR
 						RELEASE(pDataList);
@@ -615,6 +689,7 @@ namespace SpongySoft
 					pShellLink->GetIconLocation(this->szShortcutIconFile,				ARRAY_SIZE(this->szShortcutIconFile), &this->iIcon);
 					pShellLink->GetPath(this->szShortcutTarget,							ARRAY_SIZE(this->szShortcutTarget), NULL, 0);
 					pShellLink->GetWorkingDirectory(this->szShortcutWorkingDirectory,	ARRAY_SIZE(this->szShortcutWorkingDirectory));
+					pShellLink->GetShowCmd(&this->iShowCmd);
 				}
 
 				#ifndef USE_CCOMPTR
@@ -630,21 +705,27 @@ namespace SpongySoft
 		return hr;
 	}
 
+
 	//=================================================================================================================================================================================================
+	// Get the flags of the shortcut
 	//=================================================================================================================================================================================================
 	DWORD _ShortCut::GetFlags(void) const
 	{
 		return this->dwFlags;
 	}
 
+
 	//=================================================================================================================================================================================================
+	// Set the flags of the shortcut
 	//=================================================================================================================================================================================================
 	void _ShortCut::SetFlags(DWORD flags)
 	{
 		this->dwFlags = flags;
 	}
 
+
 	//=================================================================================================================================================================================================
+	// Set the flags of the shortcut
 	//=================================================================================================================================================================================================
 	void _ShortCut::SetFlags(DWORD flagsOr, DWORD flagsAnd)
 	{
@@ -652,7 +733,9 @@ namespace SpongySoft
 		this->dwFlags |= flagsOr;
 	}
 
+
 	//=================================================================================================================================================================================================
+	// Get the "run as admin" flag of the shortcut
 	//=================================================================================================================================================================================================
 	HRESULT _ShortCut::GetRunAsAdmin(BOOL &bRunAsAdmin) const
 	{
@@ -660,7 +743,9 @@ namespace SpongySoft
 		return S_OK;
 	}
 
+
 	//=================================================================================================================================================================================================
+	// Set the "run as admin" flag of the shortcut
 	//=================================================================================================================================================================================================
 	HRESULT _ShortCut::SetRunAsAdmin(BOOL bRunAsAdmin)
 	{
@@ -675,7 +760,9 @@ namespace SpongySoft
 		return S_OK;
 	}
 
+
 	//=================================================================================================================================================================================================
+	// Set the v2 console option flag
 	//=================================================================================================================================================================================================
 	HRESULT _ShortCut::SetV2ConsoleOption(v2ConsoleOption option, v2ConsoleBool value)
 	{
@@ -688,7 +775,9 @@ namespace SpongySoft
 		return E_INVALIDARG;;
 	}
 
+
 	//=================================================================================================================================================================================================
+	// Get the v2 console option flag
 	//=================================================================================================================================================================================================
 	HRESULT _ShortCut::GetV2ConsoleOption(v2ConsoleOption option, v2ConsoleBool *result) const
 	{
@@ -706,5 +795,20 @@ namespace SpongySoft
 		return E_INVALIDARG;;
 	}
 
+	//=================================================================================================================================================================================================
+	//=================================================================================================================================================================================================
+	HRESULT _ShortCut::SetShowCmd(int iShowCmd)
+	{
+		this->iShowCmd = iShowCmd;
+		return S_OK;
+	}
+
+	//=================================================================================================================================================================================================
+	//=================================================================================================================================================================================================
+	HRESULT _ShortCut::GetShowCmd(int &iShowCmd) const
+	{
+		iShowCmd = this->iShowCmd;
+		return S_OK;
+	}
 }
 

@@ -1,58 +1,65 @@
+//=====================================================================================================================================================================================================
+//
+// SpongySoft ShortCut
+// Copyright (C) SpongySoft. All rights reserved.
+//
+//=====================================================================================================================================================================================================
 #include "stdafx.h"
 #include "shortcut.h"
 
-using namespace SpongySoft;
 
+//=====================================================================================================================================================================================================
+// Define some version stuff, and other definitions and macros
+//=====================================================================================================================================================================================================
+#define THIS_VERSION "3.19.231015"
 #define MAX_STRING 16384
-#define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
 
-#if 0
-auto deleteShortCut = [](SpongySoft::ShortCut *&pShortCut)
-{
-	pShortCut->Release();
-	pShortCut = nullptr;
-};
-
-
-inline std::unique_ptr<SpongySoft::ShortCut,decltype(deleteShortCut)> CreateShortcut(LPCTSTR pszShortcutFile, LPCTSTR pszShortcutTarget, LPCTSTR pszShortcutArguments, LPCTSTR pszShortcutDescription, LPCTSTR pszShortcutWorkingDirectory)
-{
-	return std::unique_ptr<SpongySoft::ShortCut,decltype(deleteShortCut)>(SpongySoft::ShortCut::Create(pszShortcutFile, pszShortcutTarget, pszShortcutArguments, pszShortcutDescription, pszShortcutWorkingDirectory));
-}
-
-inline std::unique_ptr<SpongySoft::ShortCut,decltype(deleteShortCut)> CreateShortcut(LPCTSTR pszShortcutFile)
-{
-	return std::unique_ptr<SpongySoft::ShortCut,decltype(deleteShortCut)>(SpongySoft::ShortCut::Create(pszShortcutFile));
-}
-
-inline std::unique_ptr<SpongySoft::ShortCut,decltype(deleteShortCut)> OpenShortcut(LPCTSTR pszShortcutFile)
-{
-	return std::unique_ptr<SpongySoft::ShortCut,decltype(deleteShortCut)>(SpongySoft::ShortCut::Open(pszShortcutFile));
-}
+#ifdef _DEBUG
+	#define FLAVOR "(DEBUG) "
+#else
+    #define FLAVOR ""
 #endif
 
+// array size...
+template<typename T, size_t size> size_t inline ARRAY_SIZE(const T(&)[size]) { return size; }
+
+
+//=====================================================================================================================================================================================================
+// namespaces in use
+//=====================================================================================================================================================================================================
+using namespace SpongySoft;
+
+
+
+//=====================================================================================================================================================================================================
+// Display the usage
+//=====================================================================================================================================================================================================
 void usage(int option=0)
 {
 	printf("Usage:\n\n");
 	printf("   shortcut.exe [create | edit | query] shortcutfile [options]\n\n");
 	printf("Options:\n");
-	printf("   -t  target\n");
-	printf("   -w  working folder\n");
-	printf("   -i  iconfile iconindex\n");
-	printf("   -d  description\n");
-	printf("   -a  arguments (must be the last option)\n");
-	printf("   -c  index color\n");
-	printf("   -nl no logo\n");
-	printf("   -ws window size (x y)\n");
-	printf("   -bs buffer size (x y)\n");
-	printf("   -qe num (quick edit, 0 for false, 1 for true)\n");
-	printf("   -im num (insert mode, 0 for false, 1 for true)\n");
-	printf("   -ra (0 or 1) run as administrator\n");
-	printf("   -lw (0 or 1) line wrapping (for v2 shortcuts)\n");
-	printf("   -v2 (0 or 1) force v2 (for v2 shortcuts)\n");
-	printf("   -fn {name} font name\n");
-	printf("   -ff {num} font family\n");
-	printf("   -fw {num} font weight\n");
-	printf("   -fs {num} {num} font size\n");
+	printf("   -t   target\n");
+	printf("   -w   working folder\n");
+	printf("   -i   iconfile iconindex\n");
+	printf("   -d   description\n");
+	printf("   -a   arguments (must be the last option)\n");
+	printf("   -c   index color\n");
+	printf("   -nl  no logo\n");
+	printf("   -ws  window size (x y)\n");
+	printf("   -bs  buffer size (x y)\n");
+	printf("   -fa  fill attribute (fore back)\n");
+	printf("   -pf  popup fill attribute (fore back)\n");
+	printf("   -qe  num (quick edit, 0 for false, 1 for true)\n");
+	printf("   -im  num (insert mode, 0 for false, 1 for true)\n");
+	printf("   -ra  (0 or 1) run as administrator\n");
+	printf("   -lw  (0 or 1) line wrapping (for v2 shortcuts)\n");
+	printf("   -v2  (0 or 1) force v2 (for v2 shortcuts)\n");
+	printf("   -fn  {name} font name\n");
+	printf("   -ff  {num} font family\n");
+	printf("   -fw  {num} font weight\n");
+	printf("   -fs  {num} {num} font size\n");
+	printf("   -min start minimized\n");
 }
 
 //	Props.wFillAttribute:          7
@@ -91,6 +98,10 @@ void usage(int option=0)
 //	Props.ColorTable[14]:          0000FFFF
 //	Props.ColorTable[15]:          00FFFFFF
 
+
+//=====================================================================================================================================================================================================
+// Set the default console props to use
+//=====================================================================================================================================================================================================
 static NT_CONSOLE_PROPS defaultProps =
 {
 	{
@@ -137,6 +148,10 @@ static NT_CONSOLE_PROPS defaultProps =
 
 };
 
+
+//=====================================================================================================================================================================================================
+// Hex conversion
+//=====================================================================================================================================================================================================
 #define HEXVAL(c) ((((c)>='0')&&((c)<='9')) ? (c)-'0' :((((c)>='A')&&((c)<='F')) ? (c)+10-'A' :((((c)>='a')&&((c)<='f')) ? (c)+10-'a' : 0)))
 
 DWORD _htoi(const TCHAR *s)
@@ -151,7 +166,9 @@ DWORD _htoi(const TCHAR *s)
 	return d;
 }
 
+
 //=====================================================================================================================================================================================================
+// Convert a console option to a string
 //=====================================================================================================================================================================================================
 char *ConsoleOptionToString(ShortCut::v2ConsoleOption value)
 {
@@ -164,12 +181,15 @@ char *ConsoleOptionToString(ShortCut::v2ConsoleOption value)
 		SWITCHCASE(ctrlkeysdisabled);
 		SWITCHCASE(lineselection);
 		SWITCHCASE(windowtransparency);
+		SWITCHCASE(trimzeros);
 		#undef SWITCHCASE
 		default: return "unknown";
 	}
 }
 
+
 //=====================================================================================================================================================================================================
+// Convert bool to string
 //=====================================================================================================================================================================================================
 char *ConsoleBoolToString(ShortCut::v2ConsoleBool value)
 {
@@ -184,21 +204,40 @@ char *ConsoleBoolToString(ShortCut::v2ConsoleBool value)
 	}
 }
 
+char *ShowCmdToString(int iShowCmd)
+{
+	switch (iShowCmd)
+	{
+		#define SWITCHCASE(o) case (o): return #o;break;
+		SWITCHCASE(SW_HIDE);
+		SWITCHCASE(SW_SHOWNORMAL);
+		//SWITCHCASE(SW_NORMAL);
+		SWITCHCASE(SW_SHOWMINIMIZED);
+		SWITCHCASE(SW_SHOWMAXIMIZED);
+		//SWITCHCASE(SW_MAXIMIZE);
+		SWITCHCASE(SW_SHOWNOACTIVATE);
+		SWITCHCASE(SW_SHOW);
+		SWITCHCASE(SW_MINIMIZE);
+		SWITCHCASE(SW_SHOWMINNOACTIVE);
+		SWITCHCASE(SW_SHOWNA);
+		SWITCHCASE(SW_RESTORE);
+		SWITCHCASE(SW_SHOWDEFAULT);
+		SWITCHCASE(SW_FORCEMINIMIZE);
+		//SWITCHCASE(SW_MAX);
+		#undef SWITCHCASE
+		default: return "unknown";
+	}
+}
+
 
 //=====================================================================================================================================================================================================
+// Main function
 //=====================================================================================================================================================================================================
 int __cdecl _tmain(int argc, _TCHAR* argv[])
 {
 	HRESULT hr;
 	NT_CONSOLE_PROPS props = {0};
 	TCHAR szFontFaceName[MAX_PATH] = _T("Terminal");
-
-#define THIS_VERSION "3.11"
-#ifdef _DEBUG
-	#define FLAVOR "  (DEBUG)"
-#else
-    #define FLAVOR "  (DEBUG)"
-#endif
 
 	//argv = CommandLineToArgvW(GetCommandLine(), &argc);
 
@@ -228,7 +267,7 @@ int __cdecl _tmain(int argc, _TCHAR* argv[])
 
 	if (showlogo)
 	{
-		printf("Shortcut " THIS_VERSION " Copyright(c) 2013-2016 SpongySoft Software " FLAVOR "(DEBUG) (%d-bit).\n", 8*sizeof(void*));
+		printf("Shortcut " THIS_VERSION " Copyright(c) 2013-2023 SpongySoft Software " FLAVOR "(%zd-bit).\n", 8*sizeof(void*));
 	}
 
 
@@ -261,12 +300,14 @@ int __cdecl _tmain(int argc, _TCHAR* argv[])
 			}
 
 			bool bProps = false;
+			int iShowCmd = 0;
 
 			if (FAILED(hr=pShortCut->GetTarget(szTargetFile, sizeof(szTargetFile)))) { fprintf(stderr, "Error 0x%08X on line %d\n", hr, __LINE__); }
 			if (FAILED(hr=pShortCut->GetArguments(szArguments, sizeof(szArguments)))) { fprintf(stderr, "Error 0x%08X on line %d\n", hr, __LINE__); }
 			if (FAILED(hr=pShortCut->GetDescription(szDescription, sizeof(szDescription)))) { fprintf(stderr, "Error 0x%08X on line %d\n", hr, __LINE__); }
 			if (FAILED(hr=pShortCut->GetWorkingDirectory(szWorkingFolder, sizeof(szWorkingFolder)))) { fprintf(stderr, "Error 0x%08X on line %d\n", hr, __LINE__); }
 			if (FAILED(hr=pShortCut->GetIcon(szIcon, sizeof(szIcon), (INT *)&dwIcon))) { fprintf(stderr, "Error 0x%08X on line %d\n", hr, __LINE__); }
+			if (FAILED(hr=pShortCut->GetShowCmd(iShowCmd))) { fprintf(stderr, "Error 0x%08X on line %d\n", hr, __LINE__); }
 			if (SUCCEEDED(hr=pShortCut->GetConsoleProps(&props, sizeof(props)))) { bProps = true; }
 
 			printf("Shortcut file:  \"%S\"\n", argv[2]);
@@ -275,11 +316,12 @@ int __cdecl _tmain(int argc, _TCHAR* argv[])
 			printf("Arguments:      \"%S\"\n", szArguments);
 			printf("Description:    \"%S\"\n", szDescription);
 			printf("Icon:           \"%S\" (%d)\n", szIcon, dwIcon);
+			printf("Show Command:   \"%s\"\n", ShowCmdToString(iShowCmd));
 
 			if (bProps)
 			{
-				printf("Props.wFillAttribute:          %d\n", props.wFillAttribute);
-				printf("Props.wPopupFillAttribute:     %d\n", props.wPopupFillAttribute);
+				printf("Props.wFillAttribute:          %d %d\n", props.wFillAttribute>>4,props.wFillAttribute&0xF);
+				printf("Props.wPopupFillAttribute:     %d %d\n", props.wPopupFillAttribute>>4,props.wPopupFillAttribute&0xF);
 				printf("Props.dwScreenBufferSize:      %d,%d\n", props.dwScreenBufferSize.X, props.dwScreenBufferSize.Y);
 				printf("Props.dwWindowSize:            %d,%d\n", props.dwWindowSize.X, props.dwWindowSize.Y);
 				printf("Props.dwWindowOrigin:          %d,%d\n", props.dwWindowOrigin.X, props.dwWindowOrigin.Y);
@@ -386,6 +428,7 @@ int __cdecl _tmain(int argc, _TCHAR* argv[])
 				if (++i < argc)
 				{
 					_tcscpy_s(szTargetFile, ARRAY_SIZE(szTargetFile), argv[i]);
+
 					if (FAILED(hr=pShortCut->SetTarget(szTargetFile))) { fprintf(stderr, "Error 0x%08X on line %d\n", hr, __LINE__); }
 				}
 			}
@@ -394,6 +437,7 @@ int __cdecl _tmain(int argc, _TCHAR* argv[])
 				if (++i < argc)
 				{
 					_tcscpy_s(szWorkingFolder, ARRAY_SIZE(szWorkingFolder), argv[i]);
+
 					if (FAILED(hr=pShortCut->SetWorkingDirectory(szWorkingFolder))) { fprintf(stderr, "Error 0x%08X on line %d\n", hr, __LINE__); }
 				}
 			}
@@ -402,6 +446,7 @@ int __cdecl _tmain(int argc, _TCHAR* argv[])
 				if (++i < argc)
 				{
 					_tcscpy_s(szDescription, ARRAY_SIZE(szDescription), argv[i]);
+
 					if (FAILED(hr=pShortCut->SetDescription(szDescription))) { fprintf(stderr, "Error 0x%08X on line %d\n", hr, __LINE__); }
 				}
 			}
@@ -507,6 +552,17 @@ int __cdecl _tmain(int argc, _TCHAR* argv[])
 					ShortCut::v2ConsoleBool value = ((DWORD)_ttoi(argv[i]) == 1) ? ShortCut::v2ConsoleBool::set : ShortCut::v2ConsoleBool::unset;
 
 					if (FAILED(hr=pShortCut->SetV2ConsoleOption(option, value))) { fprintf(stderr, "Error 0x%08X on line %d\n", hr, __LINE__); }
+
+					if (value == ShortCut::v2ConsoleBool::set)
+					{
+						if (FAILED(hr=pShortCut->SetV2ConsoleOption(ShortCut::v2ConsoleOption::filteronpaste, ShortCut::v2ConsoleBool::set))) { fprintf(stderr, "Error 0x%08X on line %d\n", hr, __LINE__); }
+						if (FAILED(hr=pShortCut->SetV2ConsoleOption(ShortCut::v2ConsoleOption::windowtransparency, ShortCut::v2ConsoleBool::set))) { fprintf(stderr, "Error 0x%08X on line %d\n", hr, __LINE__); }
+					}
+					else
+					{
+						if (FAILED(hr=pShortCut->SetV2ConsoleOption(ShortCut::v2ConsoleOption::filteronpaste, ShortCut::v2ConsoleBool::unset))) { fprintf(stderr, "Error 0x%08X on line %d\n", hr, __LINE__); }
+						if (FAILED(hr=pShortCut->SetV2ConsoleOption(ShortCut::v2ConsoleOption::windowtransparency, ShortCut::v2ConsoleBool::unset))) { fprintf(stderr, "Error 0x%08X on line %d\n", hr, __LINE__); }
+					}
 				}
 			}
 			else if (0 == _tcscmp(argv[i], _T("-fn"))) // font face name
@@ -514,6 +570,8 @@ int __cdecl _tmain(int argc, _TCHAR* argv[])
 				if (++i < argc)
 				{
 					_tcscpy_s(props.FaceName, ARRAY_SIZE(props.FaceName), argv[i]);
+
+					if (FAILED(hr=pShortCut->SetConsoleProps(&props))) { fprintf(stderr, "Error 0x%08X on line %d\n", hr, __LINE__); }
 				}
 			}
 			else if (0 == _tcscmp(argv[i], _T("-ff"))) // font family
@@ -521,6 +579,8 @@ int __cdecl _tmain(int argc, _TCHAR* argv[])
 				if (++i < argc)
 				{
 					props.uFontFamily = (DWORD)_ttoi(argv[i]);
+
+					if (FAILED(hr=pShortCut->SetConsoleProps(&props))) { fprintf(stderr, "Error 0x%08X on line %d\n", hr, __LINE__); }
 				}
 			}
 			else if (0 == _tcscmp(argv[i], _T("-fw"))) // font weight
@@ -528,6 +588,8 @@ int __cdecl _tmain(int argc, _TCHAR* argv[])
 				if (++i < argc)
 				{
 					props.uFontWeight = (DWORD)_ttoi(argv[i]);
+
+					if (FAILED(hr=pShortCut->SetConsoleProps(&props))) { fprintf(stderr, "Error 0x%08X on line %d\n", hr, __LINE__); }
 				}
 			}
 			else if (0 == _tcscmp(argv[i], _T("-fs"))) // font size
@@ -536,7 +598,35 @@ int __cdecl _tmain(int argc, _TCHAR* argv[])
 				{
 					props.dwFontSize.X = (short)_ttoi(argv[++i]);
 					props.dwFontSize.Y = (short)_ttoi(argv[++i]);
+
+					if (FAILED(hr=pShortCut->SetConsoleProps(&props))) { fprintf(stderr, "Error 0x%08X on line %d\n", hr, __LINE__); }
 				}
+			}
+			else if (0 == _tcscmp(argv[i], _T("-fa"))) // fill attribute
+			{
+				if (i+2 < argc)
+				{
+					WORD fa1 = ((WORD)_ttoi(argv[++i]))&0xF;
+					WORD fa2 = ((WORD)_ttoi(argv[++i]))&0xF;
+					props.wFillAttribute = (fa1 << 4) | fa2;
+
+					if (FAILED(hr=pShortCut->SetConsoleProps(&props))) { fprintf(stderr, "Error 0x%08X on line %d\n", hr, __LINE__); }
+				}
+			}
+			else if (0 == _tcscmp(argv[i], _T("-pf"))) // popup fill attribute
+			{
+				if (i+2 < argc)
+				{
+					WORD fa1 = ((WORD)_ttoi(argv[++i]))&0xF;
+					WORD fa2 = ((WORD)_ttoi(argv[++i]))&0xF;
+					props.wPopupFillAttribute = (fa1 << 4) | fa2;
+
+					if (FAILED(hr=pShortCut->SetConsoleProps(&props))) { fprintf(stderr, "Error 0x%08X on line %d\n", hr, __LINE__); }
+				}
+			}
+			else if (0 == _tcscmp(argv[i], _T("-min"))) // show minimized
+			{
+				if (FAILED(hr=pShortCut->SetShowCmd(SW_SHOWMINNOACTIVE))) { fprintf(stderr, "Error 0x%08X on line %d\n", hr, __LINE__); }
 			}
 			else if (0 == _tcscmp(argv[i], _T("-nl")))
 			{
@@ -548,7 +638,7 @@ int __cdecl _tmain(int argc, _TCHAR* argv[])
 			}
 		}
 
-		if (FAILED(hr=pShortCut->Save())) { fprintf(stderr, "Error 0x%08X on line %d\n", hr, __LINE__); }
+		if (FAILED(hr=pShortCut->Save())) { fprintf(stderr, "Error 0x%08X saving \"%S\": %s(%d)\n", hr, pShortCut->ShortcutFile(), __FILE__, __LINE__); }
 		pShortCut->Release();
 	}
 	else

@@ -1,3 +1,9 @@
+//=====================================================================================================================================================================================================
+//
+// SpongySoft ShortCut
+// Copyright (C) SpongySoft. All rights reserved.
+//
+//=====================================================================================================================================================================================================
 #define RELEASE(p) if (p) { (p)->Release(); (p)=NULL; }
 
 namespace SpongySoft
@@ -20,6 +26,7 @@ namespace SpongySoft
 			ctrlkeysdisabled,
 			lineselection,
 			windowtransparency,
+			trimzeros,
 
 			maxvalue,
 		};
@@ -37,6 +44,7 @@ namespace SpongySoft
 		virtual HRESULT SetIcon(LPCTSTR pszShortcutIconFile, INT iIconIndex) = 0;
 		virtual HRESULT SetConsoleProps(NT_CONSOLE_PROPS const *pConsoleProps) = 0;
 		virtual HRESULT SetV2ConsoleOption(v2ConsoleOption option, v2ConsoleBool result) = 0;
+		virtual HRESULT SetShowCmd(int iShowCmd) = 0;
 
 		virtual HRESULT GetTarget(LPTSTR pszShortcutTarget, DWORD dwSizeInBytes) const = 0;
 		virtual HRESULT GetArguments(LPTSTR pszShortcutArguments, DWORD dwSizeInBytes) const = 0;
@@ -45,19 +53,21 @@ namespace SpongySoft
 		virtual HRESULT GetIcon(LPTSTR pszShortcutIconFile, DWORD dwSizeInBytes, INT *piIconIndex) const = 0;
 		virtual HRESULT GetConsoleProps(NT_CONSOLE_PROPS *pConsoleProps, DWORD dwSize) const = 0;
 		virtual HRESULT GetV2ConsoleOption(v2ConsoleOption option, v2ConsoleBool *result) const = 0;
+		virtual HRESULT GetShowCmd(int &iShowCmd) const = 0;
 
 		virtual HRESULT GetRunAsAdmin(BOOL &bRunAsAdmin) const = 0;
 		virtual HRESULT SetRunAsAdmin(BOOL bRunAsAdmin) = 0;
 
-#ifdef _DEBUG
+//#ifdef _DEBUG
 		virtual LPCTSTR Target(void) const = 0;
 		virtual LPCTSTR Arguments(void) const = 0;
 		virtual LPCTSTR Description(void) const = 0;
 		virtual LPCTSTR WorkingDirectory(void) const = 0;
 		virtual LPCTSTR IconFile(void) const = 0;
+		virtual LPCTSTR ShortcutFile(void) const = 0;
 		virtual INT IconIndex(void) const = 0;
 		virtual const NT_CONSOLE_PROPS *ConsoleProps(void) const = 0;
-#endif
+//#endif
 
 	public:
 		virtual HRESULT Save(void) const = 0;
